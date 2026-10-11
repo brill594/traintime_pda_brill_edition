@@ -19,6 +19,9 @@ class WearCompanionSyncService {
 
   const WearCompanionSyncService();
 
+  String get phoneAccount =>
+      preference.getString(preference.Preference.idsAccount);
+
   Future<void> startPaymentProxy() async {
     _channel.setMethodCallHandler((call) async {
       if (call.method != 'receivePaymentQrRequest') {
@@ -53,11 +56,8 @@ class WearCompanionSyncService {
     Uint8List? paymentQr,
     DateTime? paymentQrFetchedAt,
   }) {
-    final account = preference.getString(preference.Preference.idsAccount);
+    final account = phoneAccount;
     final password = preference.getString(preference.Preference.idsPassword);
-    final semester = preference.getString(
-      preference.Preference.currentSemester,
-    );
     final classTable = ClassTableSession().getCache()?.$2;
     if (account.isEmpty || password.isEmpty) {
       throw StateError('请先在手机端登录 IDS');
@@ -70,14 +70,6 @@ class WearCompanionSyncService {
     return {
       'schemaVersion': 1,
       'sessionId': sessionId,
-      // The watch uses these credentials only for the payment-code exception.
-      'credentials': {
-        'idsAccount': account,
-        'idsPassword': password,
-        if (preference.contains(preference.Preference.role))
-          'isPostGraduate': preference.getBool(preference.Preference.role),
-        'currentSemester': semester,
-      },
       'schedule': {
         'classTable': classTable.toJson(),
         if (experiments != null)
@@ -100,15 +92,21 @@ class WearCompanionSyncService {
     try {
       final cached = await _channel
           .invokeMapMethod<String, dynamic>('getCachedPaymentQr', {
-            'idsAccount': (snapshot['credentials'] as Map)['idsAccount'],
+            'idsAccount': phoneAccount,
           })
           .timeout(const Duration(seconds: 2));
+      if (cached?['profileId'] is String) {
+        snapshot['profileId'] = cached!['profileId'];
+      }
       if (cached != null &&
           cached['pngBase64'] is String &&
           (cached['pngBase64'] as String).isNotEmpty &&
           cached['fetchedAtEpochMs'] is num &&
           (cached['fetchedAtEpochMs'] as num) >= 0) {
-        snapshot['paymentQr'] = cached;
+        snapshot['paymentQr'] = {
+          'pngBase64': cached['pngBase64'],
+          'fetchedAtEpochMs': cached['fetchedAtEpochMs'],
+        };
       }
     } catch (_) {
       // An optional cached code must never block offline schedule synchronization.

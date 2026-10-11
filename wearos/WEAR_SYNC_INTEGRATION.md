@@ -14,7 +14,7 @@ The phone app lives at the repository root. The Wear OS target lives in
 2. Open `设置 > XDYou Wear` on the Android phone.
 3. The phone obtains connected watches from `NodeClient.connectedNodes`.
 4. Select a watch and tap `配对`.
-5. The phone sends the cached credential/schedule envelope through
+5. The phone sends the cached schedule/payment envelope through
    `MessageClient` to `/traintime_pda_wear_os/sync/v1`.
 6. After a successful import, the watch remembers the source phone node and
    acknowledges the matching session on
@@ -37,23 +37,16 @@ when the Flutter activity is not running. A normal phone homepage refresh
 updates that native snapshot.
 
 For a payment QR, a normal page open immediately displays the last local copy
-without networking. Pulling down first asks the connected paired phone through
-the system Wear OS Data Layer, avoiding watch-side Wi-Fi/LTE and IDS work when
-the phone can supply the code. Phone discovery and response together have a
-10-second limit. The existing phone payment proxy requires the phone app to be
-in the foreground; its background listener reports `phone_app_required` immediately when
-the proxy is unavailable. A disconnected phone, failed response or timeout falls
-back to the synchronized account/password, persisted IDS cookies, browser
-fingerprint and short-lived school-card openid on the watch. Automatic slider
-verification and an on-watch SMS MFA page are supported; the previous local
-copy remains the final fallback. Transient network errors do not clear a valid
-IDS cookie.
+without networking. Pulling down asks the connected paired phone through the
+system Wear OS Data Layer. Phone discovery and response together have a
+10-second limit. The phone payment proxy requires XDYou to be in the foreground;
+its background listener reports `phone_app_required` when unavailable. A failed
+response or timeout retains the local copy and asks the user to retry on the
+phone. Authentication runs only on the phone.
 
-Manual sync waits and unfinished payment/authentication work are cancelled when
-the watch activity leaves the foreground. Networking is permitted only while
-the watch activity is resumed: Data Layer sends check this state, and all IDS,
-slider, SMS and no-cookie discovery HTTP clients share a foreground guard and
-cancellation dispatcher. Cancelled sessions cannot resume networking later.
+Manual sync waits and unfinished payment requests are cancelled when the watch
+activity leaves the foreground. Data Layer sends and listeners operate only
+while the watch activity is resumed. Cancelled sessions cannot resume later.
 A displayed payment QR keeps the
 screen on only while resumed, for at most 60 seconds (15 seconds when Android's
 `PowerManager` reports power-save mode). Other pages follow the system screen
@@ -62,7 +55,7 @@ timeout. No periodic jobs, foreground services or manual wake locks are added.
 If the phone is disconnected, the watch continues to use its local class-table
 and experiment caches. A successfully fetched payment QR is also cached on the
 watch; an offline copy is marked below the QR with its fetch time because it
-may have expired.
+may have expired. Fetch times appear briefly in a bubble below the code.
 
 ## Agenda tile
 
@@ -92,8 +85,7 @@ The JSON envelope uses schema version `1` and contains:
 
 - `sessionId`: `direct-pairing` for first pairing or `background-sync` later.
 - `directPairing`: `true` only for the first direct-pairing message.
-- `credentials`: IDS account/password, role and semester. On the watch these
-  credentials are retained only for the payment-code exception.
+- `profileId`: random phone-generated cache scope; it carries no login credentials.
 - `schedule.classTable`: the phone's cached `ClassTableData.toJson()` value.
 - `schedule.otherExperiments`: optional cached experiment list.
 - `paymentQr`: optional phone-fetched PNG and fetch time.

@@ -86,8 +86,6 @@ fun HomeScreen(
                 }
                 Spacer(Modifier.height(8.dp))
                 CampusCard(onOpenQr = onOpenQr)
-                Spacer(Modifier.height(8.dp))
-                Text("下拉刷新", style = MaterialTheme.typography.caption2)
                 if (error != null) {
                     Spacer(Modifier.height(6.dp))
                     Text(

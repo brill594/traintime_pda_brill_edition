@@ -17,7 +17,6 @@ import io.github.benderblog.traintime_pda.ui.screens.HomeScreen
 import io.github.benderblog.traintime_pda.ui.screens.AgendaScreen
 import io.github.benderblog.traintime_pda.ui.screens.PairingScreen
 import io.github.benderblog.traintime_pda.ui.screens.QrScreen
-import io.github.benderblog.traintime_pda.ui.screens.ReAuthScreen
 
 private val WearColorPalette = Colors(
     primary = Color(0xFF70D6FF),
@@ -45,9 +44,6 @@ fun WearApp(viewModel: WearViewModel) {
     }
 
     BackHandler(enabled = state.screen == WearScreen.QR) {
-        viewModel.closeQr()
-    }
-    BackHandler(enabled = state.screen == WearScreen.REAUTH) {
         viewModel.closeQr()
     }
     BackHandler(enabled = state.screen == WearScreen.AGENDA) {
@@ -84,20 +80,7 @@ fun WearApp(viewModel: WearViewModel) {
                     onBack = viewModel::closeQr,
                     onRetry = viewModel::retryQr,
                 )
-                WearScreen.REAUTH -> ReAuthScreen(
-                    notice = state.reAuthNotice,
-                    error = state.reAuthError,
-                    code = state.reAuthCode,
-                    sending = state.reAuthSending,
-                    submitting = state.reAuthSubmitting,
-                    secondsRemaining = state.reAuthSecondsRemaining,
-                    trustDevice = state.reAuthTrustDevice,
-                    onCodeChange = viewModel::updateReAuthCode,
-                    onTrustChange = viewModel::updateReAuthTrustDevice,
-                    onSend = viewModel::sendReAuthSms,
-                    onSubmit = viewModel::submitReAuth,
-                    onCancel = viewModel::closeQr,
-                )
+
             }
         }
     }

@@ -20,6 +20,11 @@ class WearAppContainer(context: Context) {
     val importer = WearSyncImporter(preferences, cache) {
         TileService.getUpdater(appContext).requestUpdate(AgendaTileService::class.java)
     }
+    init {
+        if (preferences.clearLegacyAuthentication()) cache.clearPaymentQr()
+        cache.clearIdsCookies()
+    }
+
     val companionClient = WearCompanionClient(appContext, importer)
 
     fun needsPairing(): Boolean = !companionClient.isCompanionPaired()

@@ -160,7 +160,7 @@ fun QrScreen(
                                 .padding(horizontal = 52.dp, vertical = 16.dp),
                         )
                     }
-                    Column(
+                    if (showTime) Column(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .padding(horizontal = 40.dp, vertical = 6.dp),
@@ -174,14 +174,14 @@ fun QrScreen(
                             else "更新 ${CacheFmt.format(time)}"
                         }
                         Text(
-                            text = if (showTime) label else "下拉刷新",
+                            text = label,
                             fontSize = 10.sp,
                             textAlign = TextAlign.Center,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(if (showTime && result.fromCache) Color(0xFF7A3E00) else Color.Black)
+                                .background(if (result.fromCache) Color(0xFF7A3E00) else Color.Black)
                                 .padding(horizontal = 8.dp, vertical = 2.dp),
                         )
                     }

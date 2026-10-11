@@ -4,10 +4,6 @@
 package io.github.benderblog.traintime_pda.payment
 
 import io.github.benderblog.traintime_pda.data.WearCacheStore
-import io.github.benderblog.traintime_pda.data.WearPreferences
-import io.github.benderblog.traintime_pda.ids.PersistentCookieJar
-import io.github.benderblog.traintime_pda.ids.SchoolCardSession
-import io.github.benderblog.traintime_pda.ids.WearIDSReAuthClient
 import io.github.benderblog.traintime_pda.sync.WearCompanionClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -15,8 +11,6 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import java.net.URI
-import java.util.concurrent.atomic.AtomicReference
 
 data class PaymentQrResult(
     val bytes: ByteArray,
@@ -42,24 +36,12 @@ data class PaymentQrResult(
     }
 }
 
-/**
- * Payment QR: local cache, then phone Data Layer, then watch IDS auth.
- */
+/** Payment codes are refreshed by the paired phone; the watch only stores images. */
 class PaymentQrRepository(
-    private val preferences: WearPreferences,
     private val cache: WearCacheStore,
     private val companionClient: WearCompanionClient,
 ) {
-    private val activeSession = AtomicReference<SchoolCardSession?>(null)
-
-    fun cancelActiveRequests() {
-        activeSession.getAndSet(null)?.cancelRequests()
-    }
-
-    suspend fun load(
-        forceRefresh: Boolean = false,
-        reAuthHandler: (suspend (WearIDSReAuthClient) -> URI)? = null,
-    ): PaymentQrResult = withContext(Dispatchers.IO) {
+    suspend fun load(forceRefresh: Boolean = false): PaymentQrResult = withContext(Dispatchers.IO) {
         loadPaymentQr(
             forceRefresh = forceRefresh,
             readCache = {
@@ -67,65 +49,15 @@ class PaymentQrRepository(
                     PaymentQrResult(bytes, fromCache = true, fetchedAtEpochMs = fetchedAt)
                 }
             },
-            requestFromPhone = { requestFromPhone() },
-            requestDirectly = { requestDirectly(reAuthHandler) },
-        )
-    }
-
-    private suspend fun requestFromPhone(): PaymentQrResult {
-        val response = companionClient.requestPaymentQrFromPhone()
-        if (!response.ok || response.pngBytes == null || response.fetchedAtEpochMs == null) {
-            throw IllegalStateException(response.error ?: "phone_payment_request_failed")
-        }
-        cache.writePaymentQr(response.pngBytes, response.fetchedAtEpochMs)
-        return PaymentQrResult(
-            bytes = response.pngBytes,
-            fromCache = false,
-            fetchedAtEpochMs = response.fetchedAtEpochMs,
-        )
-    }
-
-    private suspend fun requestDirectly(
-        reAuthHandler: (suspend (WearIDSReAuthClient) -> URI)?,
-    ): PaymentQrResult = withContext(Dispatchers.IO) {
-        val account = preferences.idsAccount
-        val password = preferences.idsPassword
-        if (account.isEmpty() || password.isEmpty()) {
-            throw IllegalStateException("missing_ids_credentials")
-        }
-        val session = SchoolCardSession(
-            cookieJar = PersistentCookieJar(cache.cookieDir),
-            username = account,
-            password = password,
-            browserFingerprint = preferences.getOrCreateIdsBrowserFingerprint(),
-            storedOpenId = preferences.schoolCardOpenId,
-            storedOpenIdFetchedAt = preferences.schoolCardOpenIdFetchedAt,
-            isNetworkAllowed = companionClient::isForeground,
-            onOpenIdChanged = { value, fetchedAt ->
-                if (value == null || fetchedAt == null) {
-                    preferences.clearSchoolCardOpenId()
-                } else {
-                    preferences.storeSchoolCardOpenId(value, fetchedAt)
+            requestFromPhone = {
+                val response = companionClient.requestPaymentQrFromPhone()
+                if (!response.ok || response.pngBytes == null || response.fetchedAtEpochMs == null) {
+                    throw IllegalStateException(response.error ?: "phone_payment_request_failed")
                 }
+                cache.writePaymentQr(response.pngBytes, response.fetchedAtEpochMs)
+                PaymentQrResult(response.pngBytes, false, response.fetchedAtEpochMs)
             },
         )
-        activeSession.set(session)
-        try {
-            currentCoroutineContext().ensureActive()
-            session.authenticateWithStoredCredentials(reAuthHandler = reAuthHandler)
-            currentCoroutineContext().ensureActive()
-            val bytes = session.getQRCode()
-            currentCoroutineContext().ensureActive()
-            val fetchedAt = System.currentTimeMillis()
-            cache.writePaymentQr(bytes, fetchedAt)
-            PaymentQrResult(
-                bytes = bytes,
-                fromCache = false,
-                fetchedAtEpochMs = fetchedAt,
-            )
-        } finally {
-            activeSession.compareAndSet(session, null)
-        }
     }
 }
 
@@ -133,33 +65,23 @@ internal suspend fun loadPaymentQr(
     forceRefresh: Boolean,
     readCache: () -> PaymentQrResult?,
     requestFromPhone: suspend () -> PaymentQrResult,
-    requestDirectly: suspend () -> PaymentQrResult,
 ): PaymentQrResult {
     currentCoroutineContext().ensureActive()
     if (!forceRefresh) readCache()?.let { return it }
-    var phoneError: String? = null
-    try {
-        // Bound phone discovery and response together; never hold up offline use indefinitely.
-        withTimeoutOrNull(10_000L) { requestFromPhone() }?.let { return it }
+    return try {
+        withTimeoutOrNull(10_000L) { requestFromPhone() }
+            ?: throw IllegalStateException("phone_timeout")
     } catch (cancelled: CancellationException) {
         throw cancelled
     } catch (error: Exception) {
-        phoneError = error.message
         currentCoroutineContext().ensureActive()
-    }
-    currentCoroutineContext().ensureActive()
-    return try {
-        requestDirectly()
-    } catch (cancelled: CancellationException) {
-        throw cancelled
-    } catch (direct: Exception) {
-        currentCoroutineContext().ensureActive()
-        readCache()?.copy(
-            refreshError = if (phoneError == "phone_app_required") {
-                "刷新失败，请打开手机端 XDYou 后重试"
-            } else {
-                "刷新失败，显示上次付款码"
-            },
-        ) ?: throw direct
+        val message = when (error.message) {
+            "phone_authentication_required", "phone_authentication_cancelled" -> "请在手机端 XDYou 完成认证后重试"
+            "phone_app_required" -> "请打开手机端 XDYou 后重试"
+            "phone_timeout" -> "手机响应超时，请打开手机端 XDYou 后重试"
+            "Companion phone is disconnected", "No companion phone is paired" -> "请连接手机并打开 XDYou 后重试"
+            else -> "手机刷新失败，请在手机端 XDYou 重试"
+        }
+        readCache()?.copy(refreshError = message) ?: throw IllegalStateException(message)
     }
 }

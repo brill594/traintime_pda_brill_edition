@@ -3,10 +3,7 @@
 
 package io.github.benderblog.traintime_pda.data
 
-import io.github.benderblog.traintime_pda.ids.IdsLoginState
-import io.github.benderblog.traintime_pda.ids.SchoolCardSession
 import io.github.benderblog.traintime_pda.protocol.WearCompanionSyncEnvelope
-import io.github.benderblog.traintime_pda.protocol.WearCredentialSyncPayload
 import io.github.benderblog.traintime_pda.protocol.WearPaymentQrSyncPayload
 import io.github.benderblog.traintime_pda.protocol.WearScheduleSyncPayload
 import org.json.JSONObject
@@ -21,25 +18,16 @@ class WearSyncImporter(
     private val onScheduleChanged: () -> Unit = {},
 ) {
     fun importEnvelope(envelope: WearCompanionSyncEnvelope, rawPayload: String? = null) {
-        importCredentials(envelope.credentials)
+        envelope.profileId?.let { profileId ->
+            if (preferences.profileId != null && preferences.profileId != profileId) {
+                cache.clearCampusCaches()
+                cache.clearPaymentQr()
+            }
+            preferences.profileId = profileId
+        }
         importSchedule(envelope.schedule, rawPayload)
         envelope.paymentQr?.let { importPaymentQr(it) }
         onScheduleChanged()
-    }
-
-    fun importCredentials(payload: WearCredentialSyncPayload) {
-        val accountChanged = preferences.idsAccount != payload.idsAccount
-        if (accountChanged) {
-            clearUserScopedState(clearPaymentQr = true)
-        }
-        preferences.idsAccount = payload.idsAccount
-        preferences.idsPassword = payload.idsPassword
-        payload.isPostGraduate?.let { preferences.isPostGraduate = it }
-        val semester = payload.currentSemester
-        if (!semester.isNullOrEmpty()) {
-            preferences.currentSemester = semester
-            preferences.isUserDefinedSemester = false
-        }
     }
 
     fun importSchedule(payload: WearScheduleSyncPayload, rawPayload: String? = null) {
@@ -57,7 +45,6 @@ class WearSyncImporter(
         }
         if (payload.classTable.semesterCode.isNotEmpty()) {
             preferences.currentSemester = payload.classTable.semesterCode
-            preferences.isUserDefinedSemester = false
         }
 
         val experiments = payload.otherExperiments
@@ -84,25 +71,10 @@ class WearSyncImporter(
     }
 
     fun logout() {
-        preferences.clearCredentials()
-        cache.clearIdsCookies()
-        SchoolCardSession.resetOpenId()
-        preferences.clearSchoolCardOpenId()
         cache.clearCampusCaches()
         cache.clearPaymentQr()
-        IdsLoginState.state = IdsLoginState.State.MANUAL
-        onScheduleChanged()
-    }
-
-    private fun clearUserScopedState(clearPaymentQr: Boolean) {
-        cache.clearIdsCookies()
-        SchoolCardSession.resetOpenId()
-        preferences.clearSchoolCardOpenId()
-        cache.clearCampusCaches()
-        if (clearPaymentQr) cache.clearPaymentQr()
-        IdsLoginState.state = IdsLoginState.State.NONE
         preferences.currentSemester = ""
-        preferences.isPostGraduate = null
-        preferences.isUserDefinedSemester = false
+        preferences.profileId = null
+        onScheduleChanged()
     }
 }

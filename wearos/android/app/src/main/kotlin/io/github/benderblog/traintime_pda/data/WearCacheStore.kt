@@ -19,7 +19,7 @@ class WearCacheStore(private val root: File) {
     val classTableFile: File get() = File(root, CLASS_TABLE_FILE)
     val experimentFile: File get() = File(root, EXPERIMENT_FILE)
     val paymentQrFile: File get() = File(root, PAYMENT_QR_FILE)
-    val cookieDir: File get() = File(root, "cookie/general")
+
 
     fun writeClassTable(data: ClassTableData, rawJson: String? = null) {
         // Prefer the original phone JSON when available to avoid re-serialization drift.
@@ -100,7 +100,7 @@ class WearCacheStore(private val root: File) {
     }
 
     fun clearIdsCookies() {
-        if (cookieDir.exists()) cookieDir.deleteRecursively()
+        File(root, "cookie").takeIf { it.exists() }?.deleteRecursively()
     }
 
     fun classTableExists(): Boolean = classTableFile.exists()

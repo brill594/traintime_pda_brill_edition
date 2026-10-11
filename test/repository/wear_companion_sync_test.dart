@@ -114,13 +114,15 @@ void main() {
 
 class _SnapshotService extends WearCompanionSyncService {
   @override
+  String get phoneAccount => 'test-account';
+
+  @override
   Map<String, dynamic> buildSnapshot({
     required String sessionId,
     Uint8List? paymentQr,
     DateTime? paymentQrFetchedAt,
   }) => {
     'sessionId': sessionId,
-    'credentials': {'idsAccount': 'test-account'},
     'schedule': {'cached': true},
   };
 }

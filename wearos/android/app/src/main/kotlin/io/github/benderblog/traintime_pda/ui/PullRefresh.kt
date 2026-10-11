@@ -27,10 +27,8 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material.CircularProgressIndicator
 import androidx.wear.compose.material.MaterialTheme
-import androidx.wear.compose.material.Text
 
 @Composable
 internal fun PullRefresh(
@@ -82,7 +80,10 @@ internal fun PullRefresh(
                 contentAlignment = Alignment.Center,
             ) {
                 if (refreshing) CircularProgressIndicator(Modifier.size(18.dp))
-                else Text(if (pull >= threshold) "松开刷新" else "↓ 下拉刷新", fontSize = 10.sp)
+                else CircularProgressIndicator(
+                    progress = (pull / threshold).coerceIn(0f, 1f),
+                    modifier = Modifier.size(18.dp),
+                )
             }
         }
     }
