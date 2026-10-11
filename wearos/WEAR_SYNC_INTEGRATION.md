@@ -37,17 +37,54 @@ when the Flutter activity is not running. A normal phone homepage refresh
 updates that native snapshot.
 
 For a payment QR, a normal page open immediately displays the last local copy
-without networking. Pulling down requests a fresh code, first using the
-synchronized account/password, persisted IDS cookies, browser fingerprint and
-short-lived school-card openid on the watch. Automatic slider verification and
-an on-watch SMS MFA page are supported; the phone proxy and the previous local
-copy remain refresh fallbacks. Transient network errors do not clear a valid
+without networking. Pulling down first asks the connected paired phone through
+the system Wear OS Data Layer, avoiding watch-side Wi-Fi/LTE and IDS work when
+the phone can supply the code. Phone discovery and response together have a
+10-second limit. The existing phone payment proxy requires the phone app to be
+in the foreground; its background listener reports `phone_app_required` immediately when
+the proxy is unavailable. A disconnected phone, failed response or timeout falls
+back to the synchronized account/password, persisted IDS cookies, browser
+fingerprint and short-lived school-card openid on the watch. Automatic slider
+verification and an on-watch SMS MFA page are supported; the previous local
+copy remains the final fallback. Transient network errors do not clear a valid
 IDS cookie.
+
+Manual sync waits and unfinished payment/authentication work are cancelled when
+the watch activity leaves the foreground. Networking is permitted only while
+the watch activity is resumed: Data Layer sends check this state, and all IDS,
+slider, SMS and no-cookie discovery HTTP clients share a foreground guard and
+cancellation dispatcher. Cancelled sessions cannot resume networking later.
+A displayed payment QR keeps the
+screen on only while resumed, for at most 60 seconds (15 seconds when Android's
+`PowerManager` reports power-save mode). Other pages follow the system screen
+timeout. No periodic jobs, foreground services or manual wake locks are added.
 
 If the phone is disconnected, the watch continues to use its local class-table
 and experiment caches. A successfully fetched payment QR is also cached on the
 watch; an offline copy is marked below the QR with its fetch time because it
 may have expired.
+
+## Agenda tile
+
+After installing the watch app, add **XDYou 课表** from the watch's tile picker.
+The tile shares the app's class-table and experiment caches. It shows the
+current event, or the next event from today and tomorrow, with its name, time
+and location. Tapping the tile opens the full agenda, including when the app
+was previously displaying a payment code.
+
+Course start/end transitions are supplied as Wear OS timeline validity periods;
+the system switches the displayed entry without a polling loop. The system
+may request a new local timeline after its 24-hour freshness interval. All tile
+requests read local files on an IO coroutine and never create HTTP or Data Layer
+clients. Importing a new phone snapshot or logging out requests a tile update.
+If there is no usable cache, the tile asks the user to open the app and sync.
+If the system has not refreshed an expired timeline, its fallback asks the user
+to open the agenda rather than displaying a finished event as current.
+
+Only the resumed watch app can receive a new phone snapshot. Local time-based
+transitions continue while the app is closed, but school-side schedule changes
+still require foreground synchronization. The tile uses the same device time
+zone, semester filtering and agenda builder as the app.
 
 ## Envelope
 

@@ -6,10 +6,13 @@ package io.github.benderblog.traintime_pda.ids
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import okhttp3.FormBody
+import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.jsoup.Jsoup
+import java.io.IOException
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 class PasswordWrongException(message: String) : Exception(message)
 class LoginFailedException(message: String) : Exception(message)
@@ -23,8 +26,16 @@ open class IdsSession(
     protected val username: String,
     protected val password: String,
     protected val browserFingerprint: String,
+    isNetworkAllowed: () -> Boolean,
 ) {
+    private val cancelled = AtomicBoolean(false)
+    private val foregroundInterceptor = ForegroundNetworkInterceptor {
+        !cancelled.get() && isNetworkAllowed()
+    }
     protected val client: OkHttpClient = OkHttpClient.Builder()
+        .addInterceptor(foregroundInterceptor)
+        .addNetworkInterceptor(foregroundInterceptor)
+        .retryOnConnectionFailure(false)
         .cookieJar(cookieJar)
         .followRedirects(false)
         .followSslRedirects(false)
@@ -159,6 +170,7 @@ open class IdsSession(
     }
 
     fun cancelRequests() {
+        cancelled.set(true)
         client.dispatcher.cancelAll()
     }
 
@@ -221,6 +233,15 @@ open class IdsSession(
 
     companion object {
         private const val TAG = "IdsSession"
+    }
+}
+
+internal class ForegroundNetworkInterceptor(
+    private val isNetworkAllowed: () -> Boolean,
+) : Interceptor {
+    override fun intercept(chain: Interceptor.Chain): okhttp3.Response {
+        if (!isNetworkAllowed()) throw IOException("Wear networking requires foreground activity")
+        return chain.proceed(chain.request())
     }
 }
 

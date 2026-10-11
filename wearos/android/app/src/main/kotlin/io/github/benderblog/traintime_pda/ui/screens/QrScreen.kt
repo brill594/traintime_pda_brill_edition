@@ -65,7 +65,7 @@ fun QrScreen(
                 CircularProgressIndicator()
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    text = "正在由手表认证",
+                    text = "正在获取付款码",
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.body2,
                 )

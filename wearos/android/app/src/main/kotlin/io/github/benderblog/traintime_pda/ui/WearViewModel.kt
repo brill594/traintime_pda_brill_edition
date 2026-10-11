@@ -15,6 +15,8 @@ import io.github.benderblog.traintime_pda.payment.PaymentQrRepository
 import io.github.benderblog.traintime_pda.payment.PaymentQrResult
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -112,6 +114,7 @@ class WearViewModel(
 
     fun onBackground() {
         container.companionClient.stopListening()
+        pendingSyncJob?.cancel()
         if ((_state.value.screen == WearScreen.QR ||
                 _state.value.screen == WearScreen.REAUTH) &&
             _state.value.qrResult == null
@@ -199,11 +202,17 @@ class WearViewModel(
             try {
                 withTimeout(15_000L) {
                     coroutineScope {
-                        val wait = async { container.companionClient.imports.first() }
+                        val wait = async(start = CoroutineStart.UNDISPATCHED) {
+                            container.companionClient.imports.first()
+                        }
                         container.companionClient.requestCompanionSync()
                         wait.await()
                     }
                 }
+            } catch (_: TimeoutCancellationException) {
+                _state.update { it.copy(homeError = "同步超时，请确认手机已连接") }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (e: Exception) {
                 // Keep previous cache; surface a soft error while offline data remains usable.
                 _state.update {
@@ -211,7 +220,6 @@ class WearViewModel(
                 }
             } finally {
                 _state.update { it.copy(syncing = false) }
-                refreshHome()
             }
         }
     }
@@ -253,6 +261,12 @@ class WearViewModel(
                 qrError = null,
             )
         }
+    }
+
+    fun showAgenda() {
+        if (container.needsPairing()) return
+        closeQr()
+        refreshHome()
     }
 
     fun retryQr() {

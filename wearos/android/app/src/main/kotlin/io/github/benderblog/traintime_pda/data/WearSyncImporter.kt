@@ -18,11 +18,13 @@ import org.json.JSONObject
 class WearSyncImporter(
     private val preferences: WearPreferences,
     private val cache: WearCacheStore,
+    private val onScheduleChanged: () -> Unit = {},
 ) {
     fun importEnvelope(envelope: WearCompanionSyncEnvelope, rawPayload: String? = null) {
         importCredentials(envelope.credentials)
         importSchedule(envelope.schedule, rawPayload)
         envelope.paymentQr?.let { importPaymentQr(it) }
+        onScheduleChanged()
     }
 
     fun importCredentials(payload: WearCredentialSyncPayload) {
@@ -89,6 +91,7 @@ class WearSyncImporter(
         cache.clearCampusCaches()
         cache.clearPaymentQr()
         IdsLoginState.state = IdsLoginState.State.MANUAL
+        onScheduleChanged()
     }
 
     private fun clearUserScopedState(clearPaymentQr: Boolean) {

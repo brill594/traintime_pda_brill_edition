@@ -14,6 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.net.URI
 import java.util.concurrent.atomic.AtomicReference
 
@@ -39,7 +40,7 @@ data class PaymentQrResult(
 }
 
 /**
- * Payment QR: prefer watch IDS auth, then phone proxy, then offline cache.
+ * Payment QR: local cache, then phone Data Layer, then watch IDS auth.
  */
 class PaymentQrRepository(
     private val preferences: WearPreferences,
@@ -55,29 +56,17 @@ class PaymentQrRepository(
     suspend fun load(
         forceRefresh: Boolean = false,
         reAuthHandler: (suspend (WearIDSReAuthClient) -> URI)? = null,
-    ): PaymentQrResult {
-        if (!forceRefresh) {
-            cache.readPaymentQr()?.let { (bytes, fetchedAt) ->
-                return PaymentQrResult(bytes, fromCache = true, fetchedAtEpochMs = fetchedAt)
-            }
-        }
-        return try {
-            requestDirectly(reAuthHandler)
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            currentCoroutineContext().ensureActive()
-            try {
-                requestFromPhone()
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (phone: Exception) {
-                currentCoroutineContext().ensureActive()
+    ): PaymentQrResult = withContext(Dispatchers.IO) {
+        loadPaymentQr(
+            forceRefresh = forceRefresh,
+            readCache = {
                 cache.readPaymentQr()?.let { (bytes, fetchedAt) ->
                     PaymentQrResult(bytes, fromCache = true, fetchedAtEpochMs = fetchedAt)
-                } ?: throw phone
-            }
-        }
+                }
+            },
+            requestFromPhone = { requestFromPhone() },
+            requestDirectly = { requestDirectly(reAuthHandler) },
+        )
     }
 
     private suspend fun requestFromPhone(): PaymentQrResult {
@@ -108,6 +97,7 @@ class PaymentQrRepository(
             browserFingerprint = preferences.getOrCreateIdsBrowserFingerprint(),
             storedOpenId = preferences.schoolCardOpenId,
             storedOpenIdFetchedAt = preferences.schoolCardOpenIdFetchedAt,
+            isNetworkAllowed = companionClient::isForeground,
             onOpenIdChanged = { value, fetchedAt ->
                 if (value == null || fetchedAt == null) {
                     preferences.clearSchoolCardOpenId()
@@ -118,8 +108,11 @@ class PaymentQrRepository(
         )
         activeSession.set(session)
         try {
+            currentCoroutineContext().ensureActive()
             session.authenticateWithStoredCredentials(reAuthHandler = reAuthHandler)
+            currentCoroutineContext().ensureActive()
             val bytes = session.getQRCode()
+            currentCoroutineContext().ensureActive()
             val fetchedAt = System.currentTimeMillis()
             cache.writePaymentQr(bytes, fetchedAt)
             PaymentQrResult(
@@ -130,5 +123,32 @@ class PaymentQrRepository(
         } finally {
             activeSession.compareAndSet(session, null)
         }
+    }
+}
+
+internal suspend fun loadPaymentQr(
+    forceRefresh: Boolean,
+    readCache: () -> PaymentQrResult?,
+    requestFromPhone: suspend () -> PaymentQrResult,
+    requestDirectly: suspend () -> PaymentQrResult,
+): PaymentQrResult {
+    currentCoroutineContext().ensureActive()
+    if (!forceRefresh) readCache()?.let { return it }
+    try {
+        // Bound phone discovery and response together; never hold up offline use indefinitely.
+        withTimeoutOrNull(10_000L) { requestFromPhone() }?.let { return it }
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        currentCoroutineContext().ensureActive()
+    }
+    currentCoroutineContext().ensureActive()
+    return try {
+        requestDirectly()
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (direct: Exception) {
+        currentCoroutineContext().ensureActive()
+        readCache() ?: throw direct
     }
 }

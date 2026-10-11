@@ -5,12 +5,12 @@ package io.github.benderblog.traintime_pda.ids
 
 import android.util.Log
 import kotlinx.coroutines.CancellationException
+import okhttp3.CookieJar
 import okhttp3.Request
 import org.jsoup.Jsoup
 import java.net.URI
 import java.io.IOException
 import java.util.Base64
-import java.util.concurrent.TimeUnit
 
 /**
  * School-card virtual QR. Only network path allowed on the watch besides Data Layer.
@@ -22,8 +22,10 @@ class SchoolCardSession(
     browserFingerprint: String,
     storedOpenId: String?,
     storedOpenIdFetchedAt: Long?,
+    isNetworkAllowed: () -> Boolean,
     private val onOpenIdChanged: (String?, Long?) -> Unit,
-) : IdsSession(cookieJar, username, password, browserFingerprint) {
+) : IdsSession(cookieJar, username, password, browserFingerprint, isNetworkAllowed) {
+    private val probeClient = client.newBuilder().cookieJar(CookieJar.NO_COOKIES).build()
     init {
         restoreOpenId(storedOpenId, storedOpenIdFetchedAt)
     }
@@ -165,7 +167,7 @@ class SchoolCardSession(
 
     private fun discoverIdsService(): String {
         // Use a no-cookie client to discover the service URL without polluting session.
-        val probe = OkHttpNoCookie()
+        val probe = OkHttpNoCookie(probeClient)
         var currentUrl = OPEN_OAUTH_URL
         var response = probe.get(currentUrl)
         repeat(10) {
@@ -203,14 +205,7 @@ class SchoolCardSession(
 
     private fun executeGetFollowResult(url: String): String = executeGetFollow(url)
 
-    private class OkHttpNoCookie {
-        private val client = okhttp3.OkHttpClient.Builder()
-            .followRedirects(false)
-            .followSslRedirects(false)
-            .connectTimeout(20, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .build()
-
+    private class OkHttpNoCookie(private val client: okhttp3.OkHttpClient) {
         fun get(url: String): HttpResult {
             val request = Request.Builder().url(url).get().build()
             client.newCall(request).execute().use { response ->
