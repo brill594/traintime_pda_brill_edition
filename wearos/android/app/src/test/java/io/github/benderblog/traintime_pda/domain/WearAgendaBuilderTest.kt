@@ -99,6 +99,18 @@ class WearAgendaBuilderTest {
         assertThat(data.todayItems.map { it.title }).containsExactly("离线课程")
     }
 
+    @Test
+    fun eveningPeriodMatchesPhoneSoTileDoesNotSwitchFiveMinutesLate() {
+        val table = singleCourseTable("晚间课程").let {
+            it.copy(timeArrangement = it.timeArrangement.map { item ->
+                item.copy(start = 10, stop = 10)
+            })
+        }
+        val item = WearAgendaBuilder.courseItemsForDay(table, LocalDate.of(2026, 5, 19)).single()
+        assertThat(item.start).isEqualTo(LocalDateTime.of(2026, 5, 19, 19, 50))
+        assertThat(item.end).isEqualTo(LocalDateTime.of(2026, 5, 19, 20, 35))
+    }
+
     companion object {
         fun singleCourseTable(name: String): ClassTableData = ClassTableData(
             semesterLength = 1,
