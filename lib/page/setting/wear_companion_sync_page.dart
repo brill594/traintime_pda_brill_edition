@@ -48,8 +48,8 @@ class _WearCompanionSyncPageState extends State<WearCompanionSyncPage> {
         _sendingNodeId = null;
         _completedNodeId = node.id;
         _status = paymentQrSynced
-            ? '配对、数据与付款码同步完成'
-            : '配对与数据同步完成，付款码未同步；请完成短信认证后重试';
+            ? '配对与缓存数据同步完成；付款码时间请查看手表'
+            : '配对与课表同步完成；付款码请在手表下拉刷新';
       });
     } catch (error) {
       if (!mounted) return;

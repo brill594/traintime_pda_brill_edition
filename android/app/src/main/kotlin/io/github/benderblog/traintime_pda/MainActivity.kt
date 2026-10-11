@@ -38,6 +38,24 @@ class MainActivity : FlutterActivity(), MessageClient.OnMessageReceivedListener 
         ).also { channel ->
             channel.setMethodCallHandler { call, result ->
                 when (call.method) {
+                "getCachedPaymentQr" -> {
+                    val account = call.argument<String>("idsAccount")
+                    val payload = WearCompanionTransport.cachedPayload(this)
+                    val qr = try {
+                        val snapshot = payload?.let { JSONObject(it) }
+                        if (snapshot != null && !account.isNullOrBlank() &&
+                            snapshot.optJSONObject("credentials")?.optString("idsAccount") == account
+                        ) snapshot.optJSONObject("paymentQr") else null
+                    } catch (_: Exception) {
+                        null
+                    }
+                    result.success(qr?.let {
+                        mapOf(
+                            "pngBase64" to it.optString("pngBase64"),
+                            "fetchedAtEpochMs" to it.optLong("fetchedAtEpochMs", -1L),
+                        )
+                    })
+                }
                 "getConnectedWearNodes" -> {
                     Wearable.getNodeClient(this).connectedNodes
                         .addOnSuccessListener { nodes ->

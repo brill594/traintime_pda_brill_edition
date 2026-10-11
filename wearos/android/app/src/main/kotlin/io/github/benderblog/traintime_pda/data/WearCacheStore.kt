@@ -75,6 +75,8 @@ class WearCacheStore(private val root: File) {
     }
 
     fun writePaymentQr(bytes: ByteArray, fetchedAtEpochMs: Long) {
+        // A schedule snapshot can carry an older phone code than the watch's last refresh.
+        if (paymentQrFile.exists() && paymentQrFile.lastModified() > fetchedAtEpochMs) return
         writeAtomically(paymentQrFile, bytes)
         paymentQrFile.setLastModified(fetchedAtEpochMs)
     }
