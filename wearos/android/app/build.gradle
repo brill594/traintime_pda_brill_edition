@@ -19,8 +19,11 @@ android {
         applicationId "io.github.benderblog.traintime_pda"
         minSdk 28
         targetSdk 34
-        versionCode 43
-        versionName "1.5.13"
+        versionCode 52
+        versionName "1.6.7-brill.1"
+        ndk {
+            abiFilters "arm64-v8a"
+        }
     }
 
     compileOptions {
