@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import io.github.benderblog.traintime_pda.WearAppContainer
 import io.github.benderblog.traintime_pda.domain.WearAgendaBuilder
 import io.github.benderblog.traintime_pda.domain.WearHomeData
+import io.github.benderblog.traintime_pda.domain.WearAgendaDay
 import io.github.benderblog.traintime_pda.ids.IdsLoginState
 import io.github.benderblog.traintime_pda.ids.WearIDSReAuthClient
 import io.github.benderblog.traintime_pda.payment.PaymentQrRepository
@@ -31,11 +32,16 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withContext
 import java.net.URI
+import java.time.LocalDate
+import java.time.DayOfWeek
+import java.time.temporal.ChronoUnit
+import java.time.temporal.TemporalAdjusters
 import kotlin.coroutines.resume
 
 enum class WearScreen {
     PAIRING,
     HOME,
+    AGENDA,
     QR,
     REAUTH,
 }
@@ -46,6 +52,10 @@ data class WearUiState(
     val homeLoading: Boolean = false,
     val homeError: String? = null,
     val syncing: Boolean = false,
+    val agendaWeeks: List<List<WearAgendaDay>> = emptyList(),
+    val agendaInitialWeek: Int = 0,
+    val agendaShowSwipeHint: Boolean = false,
+    val agendaError: String? = null,
     val pairingStarting: Boolean = true,
     val pairingStatus: String = "请在手机端打开“设置 > XDYou Wear”，选择这块手表",
     val qrLoading: Boolean = false,
@@ -117,7 +127,7 @@ class WearViewModel(
         pendingSyncJob?.cancel()
         if ((_state.value.screen == WearScreen.QR ||
                 _state.value.screen == WearScreen.REAUTH) &&
-            _state.value.qrResult == null
+            (_state.value.qrLoading || _state.value.qrResult == null)
         ) {
             qrFlowGeneration++
             cancelActiveQrWork()
@@ -191,6 +201,43 @@ class WearViewModel(
                         homeError = e.message ?: e.toString(),
                     )
                 }
+            }
+        }
+    }
+
+    fun openAgenda() {
+        try {
+            val table = container.cache.readClassTable()
+            val experiments = container.cache.readExperiments()
+            val currentWeek = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+            val termStart = table?.termStartDay?.let { raw ->
+                runCatching { LocalDate.parse(raw.take(10)) }.getOrNull()
+            }
+            val start = termStart?.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)) ?: currentWeek
+            val weekCount = if (termStart != null) table.semesterLength.coerceAtLeast(1) else 1
+            val weeks = (0 until weekCount).map { week ->
+                WearAgendaBuilder.loadWeekData(
+                    semesterCode = container.preferences.currentSemester,
+                    classTable = table,
+                    experiments = experiments,
+                    weekStart = start.plusWeeks(week.toLong()),
+                )
+            }
+            val initialWeek = ChronoUnit.WEEKS.between(start, currentWeek).toInt().coerceIn(0, weeks.lastIndex)
+            val showSwipeHint = !container.preferences.agendaSwipeHintShown
+            container.preferences.agendaSwipeHintShown = true
+            _state.update {
+                it.copy(
+                    screen = WearScreen.AGENDA,
+                    agendaWeeks = weeks,
+                    agendaInitialWeek = initialWeek,
+                    agendaShowSwipeHint = showSwipeHint,
+                    agendaError = null,
+                )
+            }
+        } catch (_: Exception) {
+            _state.update {
+                it.copy(screen = WearScreen.AGENDA, agendaWeeks = emptyList(), agendaError = "无法读取日程，请返回首页下拉同步")
             }
         }
     }
@@ -274,7 +321,6 @@ class WearViewModel(
         _state.update {
             it.copy(
                 qrLoading = true,
-                qrResult = null,
                 qrError = null,
             )
         }

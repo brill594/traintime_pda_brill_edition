@@ -14,6 +14,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Colors
 import io.github.benderblog.traintime_pda.ui.screens.HomeScreen
+import io.github.benderblog.traintime_pda.ui.screens.AgendaScreen
 import io.github.benderblog.traintime_pda.ui.screens.PairingScreen
 import io.github.benderblog.traintime_pda.ui.screens.QrScreen
 import io.github.benderblog.traintime_pda.ui.screens.ReAuthScreen
@@ -49,6 +50,9 @@ fun WearApp(viewModel: WearViewModel) {
     BackHandler(enabled = state.screen == WearScreen.REAUTH) {
         viewModel.closeQr()
     }
+    BackHandler(enabled = state.screen == WearScreen.AGENDA) {
+        viewModel.showAgenda()
+    }
 
     MaterialTheme(colors = WearColorPalette) {
         androidx.compose.foundation.layout.Box(
@@ -64,9 +68,14 @@ fun WearApp(viewModel: WearViewModel) {
                     loading = state.homeLoading || state.syncing,
                     error = state.homeError,
                     onRefresh = viewModel::requestManualSync,
-                    onLogout = viewModel::logout,
+                    onOpenAgenda = viewModel::openAgenda,
                     onOpenQr = viewModel::openQr,
-                    onRetry = viewModel::requestManualSync,
+                )
+                WearScreen.AGENDA -> AgendaScreen(
+                    weeks = state.agendaWeeks,
+                    initialWeek = state.agendaInitialWeek,
+                    showSwipeHint = state.agendaShowSwipeHint,
+                    error = state.agendaError,
                 )
                 WearScreen.QR -> QrScreen(
                     loading = state.qrLoading,

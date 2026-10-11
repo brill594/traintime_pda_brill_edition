@@ -49,6 +49,10 @@ class WearPreferences(context: Context) {
         get() = readBool(KEY_IS_USER_DEFINED_SEMESTER)
         set(value) = prefs.edit().putBoolean(KEY_IS_USER_DEFINED_SEMESTER, value).apply()
 
+    var agendaSwipeHintShown: Boolean
+        get() = prefs.getBoolean(KEY_AGENDA_SWIPE_HINT_SHOWN, false)
+        set(value) = prefs.edit().putBoolean(KEY_AGENDA_SWIPE_HINT_SHOWN, value).apply()
+
     val schoolCardOpenId: String?
         get() = prefs.getString(KEY_SCHOOL_CARD_OPEN_ID, null)?.ifEmpty { null }
 
@@ -133,5 +137,6 @@ class WearPreferences(context: Context) {
         private const val KEY_IDS_BROWSER_FINGERPRINT = "idsBrowserFingerprint"
         private const val KEY_SCHOOL_CARD_OPEN_ID = "schoolCardOpenId"
         private const val KEY_SCHOOL_CARD_OPEN_ID_FETCHED_AT = "schoolCardOpenIdFetchedAt"
+        private const val KEY_AGENDA_SWIPE_HINT_SHOWN = "agendaSwipeHintShown"
     }
 }
