@@ -4,7 +4,7 @@
 import 'package:flutter/material.dart';
 import 'package:watermeter/page/login/ids_reauth_dialog.dart';
 import 'package:watermeter/repository/wear_companion_sync.dart';
-import 'package:watermeter/repository/xidian_ids/ids_reauth_client.dart';
+import 'package:watermeter/repository/ids_session/ids_reauth_client.dart';
 
 class WearCompanionSyncPage extends StatefulWidget {
   const WearCompanionSyncPage({super.key});

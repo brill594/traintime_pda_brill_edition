@@ -5,10 +5,10 @@ import 'dart:convert';
 
 import 'package:flutter/services.dart';
 import 'package:watermeter/repository/preference.dart' as preference;
-import 'package:watermeter/repository/xidian_ids/classtable_session.dart';
-import 'package:watermeter/repository/xidian_ids/school_card_session.dart';
-import 'package:watermeter/repository/xidian_ids/ids_reauth_client.dart';
-import 'package:watermeter/repository/xidian_ids/sysj_session.dart';
+import 'package:watermeter/repository/ids_session/classtable_session.dart';
+import 'package:watermeter/repository/ids_session/school_card_session.dart';
+import 'package:watermeter/repository/ids_session/ids_reauth_client.dart';
+import 'package:watermeter/repository/ids_session/sysj_session.dart';
 
 /// Phone-side endpoint of the XDYou Wear companion protocol.
 class WearCompanionSyncService {
@@ -58,7 +58,7 @@ class WearCompanionSyncService {
     final semester = preference.getString(
       preference.Preference.currentSemester,
     );
-    final classTable = ClassTableSession.getCache()?.$2;
+    final classTable = ClassTableSession().getCache()?.$2;
     if (account.isEmpty || password.isEmpty) {
       throw StateError('请先在手机端登录 IDS');
     }
@@ -66,7 +66,7 @@ class WearCompanionSyncService {
       throw StateError('手机端暂无课表缓存，请先刷新首页');
     }
 
-    final experiments = SysjSession.getCache()?.$2;
+    final experiments = SysjSession().getCache()?.$2;
     return {
       'schemaVersion': 1,
       'sessionId': sessionId,
