@@ -7,6 +7,7 @@ import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,7 +22,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,6 +35,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material.Button
@@ -38,11 +44,13 @@ import androidx.wear.compose.material.CircularProgressIndicator
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
 import io.github.benderblog.traintime_pda.payment.PaymentQrResult
+import io.github.benderblog.traintime_pda.ui.pressFeedback
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.delay
 
-private val CacheFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+private val CacheFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
 
 @Composable
 fun QrScreen(
@@ -90,16 +98,29 @@ fun QrScreen(
                 )
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = onRetry) { Text("重试") }
+                    val retryInteraction = remember { MutableInteractionSource() }
+                    val backInteraction = remember { MutableInteractionSource() }
+                    Button(
+                        onClick = onRetry,
+                        interactionSource = retryInteraction,
+                        modifier = Modifier.pressFeedback(retryInteraction),
+                    ) { Text("重试") }
                     Button(
                         onClick = onBack,
                         colors = ButtonDefaults.secondaryButtonColors(),
+                        interactionSource = backInteraction,
+                        modifier = Modifier.pressFeedback(backInteraction),
                     ) { Text("返回") }
                 }
             }
         }
         result != null -> {
-            Column(
+            var showTime by remember(result) { mutableStateOf(true) }
+            LaunchedEffect(result) {
+                delay(3_000)
+                showTime = false
+            }
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .pointerInput(onRetry) {
@@ -125,48 +146,61 @@ fun QrScreen(
             ) {
                 Box(
                     modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
+                        .align(Alignment.Center)
+                        .fillMaxWidth(0.78f)
+                        .aspectRatio(1f)
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(Color.White)
+                        .padding(12.dp),
                 ) {
                     val bitmap = remember(result.bytes) {
                         BitmapFactory.decodeByteArray(result.bytes, 0, result.bytes.size)
                     }
                     if (bitmap != null) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.Center)
-                                .padding(start = 16.dp, top = 20.dp, end = 16.dp, bottom = 0.dp)
-                                .aspectRatio(1f)
-                                .clip(RoundedCornerShape(18.dp))
-                                .background(Color.White)
-                                .padding(12.dp),
-                        ) {
-                            Image(
-                                bitmap = bitmap.asImageBitmap(),
-                                contentDescription = "付款码",
-                                contentScale = ContentScale.Fit,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                        }
+                        Image(
+                            bitmap = bitmap.asImageBitmap(),
+                            contentDescription = "付款码",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize(),
+                        )
                     }
                 }
-                if (result.fromCache) {
-                    val label = remember(result.fetchedAtEpochMs) {
+                result.refreshError?.let { message ->
+                    Text(
+                        text = message,
+                        fontSize = 10.sp,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colors.error,
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(horizontal = 52.dp, vertical = 16.dp),
+                    )
+                }
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(horizontal = 40.dp, vertical = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    val label = remember(result.fetchedAtEpochMs, result.fromCache) {
                         val time = Instant.ofEpochMilli(result.fetchedAtEpochMs)
                             .atZone(ZoneId.systemDefault())
                             .toLocalDateTime()
-                        "缓存 ${CacheFmt.format(time)} · 可能失效"
+                        if (result.fromCache) "缓存 ${CacheFmt.format(time)} · 可能失效"
+                        else "更新 ${CacheFmt.format(time)}"
                     }
                     Text(
-                        text = label,
+                        text = if (showTime) label else "下拉刷新",
                         fontSize = 10.sp,
                         textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 48.dp, vertical = 6.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFF7A3E00))
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                            .background(if (showTime && result.fromCache) Color(0xFF7A3E00) else Color.Black)
+                            .padding(horizontal = 8.dp, vertical = 2.dp),
                     )
                 }
             }

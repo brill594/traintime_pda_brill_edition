@@ -92,7 +92,22 @@ class PaymentQrLoadingTest {
             requestFromPhone = { error("Phone disconnected") },
             requestDirectly = { error("Watch offline") },
         )
-        assertThat(result).isEqualTo(cached)
+        assertThat(result.bytes).isEqualTo(cached.bytes)
+        assertThat(result.fetchedAtEpochMs).isEqualTo(cached.fetchedAtEpochMs)
+        assertThat(result.fromCache).isTrue()
+        assertThat(result.refreshError).isEqualTo("刷新失败，显示上次付款码")
+    }
+
+    @Test
+    fun unavailablePhoneAndFailedWatchRefreshTellUserHowToRetry() = runTest {
+        val result = loadPaymentQr(
+            forceRefresh = true,
+            readCache = { cached },
+            requestFromPhone = { error("phone_app_required") },
+            requestDirectly = { error("Watch authentication unavailable") },
+        )
+        assertThat(result.refreshError).isEqualTo("刷新失败，请打开手机端 XDYou 后重试")
+        assertThat(result.fetchedAtEpochMs).isEqualTo(cached.fetchedAtEpochMs)
     }
 
     @Test

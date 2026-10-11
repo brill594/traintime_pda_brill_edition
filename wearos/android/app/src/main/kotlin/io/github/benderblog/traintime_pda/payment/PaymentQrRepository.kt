@@ -22,11 +22,13 @@ data class PaymentQrResult(
     val bytes: ByteArray,
     val fromCache: Boolean,
     val fetchedAtEpochMs: Long,
+    val refreshError: String? = null,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is PaymentQrResult) return false
         return fromCache == other.fromCache &&
+            refreshError == other.refreshError &&
             fetchedAtEpochMs == other.fetchedAtEpochMs &&
             bytes.contentEquals(other.bytes)
     }
@@ -35,6 +37,7 @@ data class PaymentQrResult(
         var result = bytes.contentHashCode()
         result = 31 * result + fromCache.hashCode()
         result = 31 * result + fetchedAtEpochMs.hashCode()
+        result = 31 * result + (refreshError?.hashCode() ?: 0)
         return result
     }
 }
@@ -134,12 +137,14 @@ internal suspend fun loadPaymentQr(
 ): PaymentQrResult {
     currentCoroutineContext().ensureActive()
     if (!forceRefresh) readCache()?.let { return it }
+    var phoneError: String? = null
     try {
         // Bound phone discovery and response together; never hold up offline use indefinitely.
         withTimeoutOrNull(10_000L) { requestFromPhone() }?.let { return it }
     } catch (cancelled: CancellationException) {
         throw cancelled
-    } catch (_: Exception) {
+    } catch (error: Exception) {
+        phoneError = error.message
         currentCoroutineContext().ensureActive()
     }
     currentCoroutineContext().ensureActive()
@@ -149,6 +154,12 @@ internal suspend fun loadPaymentQr(
         throw cancelled
     } catch (direct: Exception) {
         currentCoroutineContext().ensureActive()
-        readCache() ?: throw direct
+        readCache()?.copy(
+            refreshError = if (phoneError == "phone_app_required") {
+                "刷新失败，请打开手机端 XDYou 后重试"
+            } else {
+                "刷新失败，显示上次付款码"
+            },
+        ) ?: throw direct
     }
 }

@@ -14,10 +14,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,6 +39,7 @@ import androidx.wear.compose.material.Text
 import io.github.benderblog.traintime_pda.domain.WearAgendaItem
 import io.github.benderblog.traintime_pda.domain.WearAgendaKind
 import io.github.benderblog.traintime_pda.domain.WearHomeData
+import io.github.benderblog.traintime_pda.ui.pressFeedback
 import java.time.format.DateTimeFormatter
 
 private val TimeFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
@@ -107,16 +110,20 @@ fun HomeScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                val refreshInteraction = remember { MutableInteractionSource() }
+                val logoutInteraction = remember { MutableInteractionSource() }
                 Button(
                     onClick = onRefresh,
-                    modifier = Modifier.weight(1f, fill = false),
+                    interactionSource = refreshInteraction,
+                    modifier = Modifier.weight(1f, fill = false).pressFeedback(refreshInteraction),
                 ) {
                     Text(if (loading) "…" else "刷新")
                 }
                 Button(
                     onClick = onLogout,
                     colors = ButtonDefaults.secondaryButtonColors(),
-                    modifier = Modifier.weight(1f, fill = false),
+                    interactionSource = logoutInteraction,
+                    modifier = Modifier.weight(1f, fill = false).pressFeedback(logoutInteraction),
                 ) {
                     Text("退出")
                 }
@@ -226,6 +233,7 @@ private fun KindPill(kind: WearAgendaKind) {
 
 @Composable
 private fun CampusCard(onOpenQr: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -241,9 +249,10 @@ private fun CampusCard(onOpenQr: () -> Unit) {
         Spacer(Modifier.height(8.dp))
         Chip(
             onClick = onOpenQr,
+            interactionSource = interaction,
             label = { Text("付款码") },
             colors = ChipDefaults.primaryChipColors(),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().pressFeedback(interaction),
         )
     }
 }
